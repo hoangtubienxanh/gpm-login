@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GPMLogin", "src\GPMLogin\GPMLogin.csproj", "{326F4EAD-5146-4926-A008-E657F53F1292}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GPMLogin.WebApi", "examples\GPMLogin.WebApi\GPMLogin.WebApi.csproj", "{084CD42F-155E-4F85-9D5E-62F0F3D974CC}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{326F4EAD-5146-4926-A008-E657F53F1292}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{326F4EAD-5146-4926-A008-E657F53F1292}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{326F4EAD-5146-4926-A008-E657F53F1292}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{326F4EAD-5146-4926-A008-E657F53F1292}.Release|Any CPU.Build.0 = Release|Any CPU
+		{084CD42F-155E-4F85-9D5E-62F0F3D974CC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{084CD42F-155E-4F85-9D5E-62F0F3D974CC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{084CD42F-155E-4F85-9D5E-62F0F3D974CC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{084CD42F-155E-4F85-9D5E-62F0F3D974CC}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
