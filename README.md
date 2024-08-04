@@ -3,7 +3,7 @@ The unofficial GPM-Login .NET library, supporting .NET Core 8.0
 
 ## Install
 
-- [NuGet](https://nuget.org/packages/Passwordless): `dotnet add package GPMLogin`
+- [NuGet](https://nuget.org/packages/GPMLogin): `dotnet add package GPMLogin`
 
 ## See also
 
