@@ -2,5 +2,5 @@
 
 public class GPMLoginOptions
 {
-    public string ApiUrl { get; init; }
+    public string ApiUrl { get; set; }
 }

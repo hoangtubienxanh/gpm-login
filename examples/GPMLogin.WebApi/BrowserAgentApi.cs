@@ -1,8 +1,12 @@
 ﻿using System.Text.Json;
+
 using GPMLogin.Apis;
 using GPMLogin.Apis.Supplements;
 using GPMLogin.Apis.Supplements.Enums;
+
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+
 using PuppeteerAot;
 
 namespace GPMLogin.WebApi;
@@ -16,40 +20,27 @@ public static class BrowserAgentApi
         group.MapGet("/fp-collect", CollectFingerprintData);
     }
 
-    private static async Task<object> CollectFingerprintData(
+    private static async Task<Ok<Dictionary<string, JsonElement?>>> CollectFingerprintData(
         [AsParameters] CollectFingerprintDataContext launcherContext, ILogger<CollectFingerprintDataContext> logger)
     {
         var (id, name, _, _, _, _, _, _, _) = await launcherContext.CreateNamedProfile();
-        var (_, _, _, address, _) = await launcherContext.Client.StartProfileAsync(id);
+        var (_, _, _, address, _) = await launcherContext.Client.StartProfileAsync(id, new StartProfileRequest()
+        {
+            CommandLineSwitches =
+            [
+                // Allow pasting
+                "--unsafely-disable-devtools-self-xss-warnings",
+                // Required for Browser.getBrowserCommandLine
+                "--enable-automation",
+            ]
+        });
         var browser = await launcherContext.EnsureConnected(address);
         var context = browser.DefaultContext;
-        
-        // One or more functions used to collect fingerprint information does require the use of `Runtime.enable`  
-        var creepJsObject = new CreepJSPage(await context.NewPageAsync()).Handle();
-        var deviceBrowserInfoJsObject = new DeviceAndBrowserInfoPage(await context.NewPageAsync()).Handle();
-        var botCheckerJsObject = new BotCheckerPage(await context.NewPageAsync()).Handle();
 
-        var task = Task.WhenAll(creepJsObject, deviceBrowserInfoJsObject, botCheckerJsObject);
+        var page = await context.NewPageAsync();
+        var cdp = await page.CreateCDPSessionAsync();
 
-        try
-        {
-            await task;
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine($"Catching {e.GetType().FullName} {e is AggregateException}");
-            Console.WriteLine($"Inspecting {task.Exception?.GetType().FullName} {task.Exception is not null}");
-        }
-
-        var response = new Dictionary<string, object>
-        {
-            { "CreepJS", creepJsObject.Result.HasValue ? creepJsObject.Result.Value : "<timeout>" },
-            {
-                "Device and browser info",
-                deviceBrowserInfoJsObject.Result.HasValue ? deviceBrowserInfoJsObject.Result.Value : "<timeout>"
-            },
-            { "Bot Checker", botCheckerJsObject.Result.HasValue ? botCheckerJsObject.Result.Value : "<timeout>" }
-        };
+        var response = await CollectFingerprintDataCore(context, cdp, logger);
 
         var choice = Random.Shared.Next(0, 1);
         logger.LogInformation("Executing cleanup strategy {choice} for profile name: {name}", choice, name);
@@ -57,23 +48,53 @@ public static class BrowserAgentApi
         if (choice is 1)
         {
             // Recommended choice
-            await launcherContext.Client.StopProfileAsync(id);
-            await launcherContext.Client.DeleteProfileAsync(id, new DeleteProfileRequest(DeleteType.Full));
+            await launcherContext.StopAndDelete(id);
         }
         else
         {
-            var page = await context.NewPageAsync();
-            var cdp = await page.CreateCDPSessionAsync();
             await await Task.Factory.StartNew(async () =>
             {
                 // context.CloseAsync() results in PuppeteerAot.PuppeteerException: Non-incognito profiles cannot be closed!
                 if (!browser.IsClosed) await cdp.SendAsync("Browser.close");
-
                 await launcherContext.Client.DeleteProfileAsync(id, new DeleteProfileRequest(DeleteType.Full));
             }, TaskCreationOptions.LongRunning);
         }
 
-        return response;
+        return TypedResults.Ok(response);
+    }
+
+    private static async Task<Dictionary<string, JsonElement?>> CollectFingerprintDataCore(IBrowserContext context,
+        ICDPSession cdp, ILogger<CollectFingerprintDataContext> logger)
+    {
+        // One or more functions used to collect fingerprint information does require the use of `Runtime.enable`  
+        var creepJsObject = new CreepJSPage(await context.NewPageAsync()).Handle();
+        var deviceBrowserInfoJsObject = new DeviceAndBrowserInfoPage(await context.NewPageAsync()).Handle();
+        var botCheckerJsObject = new BotCheckerPage(await context.NewPageAsync()).Handle();
+        var commandLineResponse = cdp.SendAsync("Browser.getBrowserCommandLine");
+        Task[] aggregatedTasks = [creepJsObject, deviceBrowserInfoJsObject, botCheckerJsObject, commandLineResponse];
+
+        try
+        {
+            await Task.WhenAll(aggregatedTasks);
+        }
+        catch (Exception e)
+        {
+            logger.LogError(0, e, "Error while processing request");
+        }
+
+        string[] keys = ["CreepJS", "Device and browser info", "Bot Checker", "Command line switches"];
+
+        var aggregatedResults = aggregatedTasks
+            .Select((task, index) =>
+            {
+                JsonElement? result = task.IsCompletedSuccessfully && task is Task<JsonElement> jsonTask
+                    ? jsonTask.Result
+                    : null;
+                return new { Key = keys[index], Value = result };
+            })
+            .ToDictionary(o => o.Key, o => o.Value);
+
+        return aggregatedResults;
     }
 }
 
@@ -113,5 +134,11 @@ internal readonly struct CollectFingerprintDataContext
         {
             DefaultViewport = null, BrowserWSEndpoint = webSocketDebuggerUrl
         });
+    }
+
+    public async Task StopAndDelete(string profileId)
+    {
+        await Client.StopProfileAsync(profileId);
+        await Client.DeleteProfileAsync(profileId, new DeleteProfileRequest(DeleteType.Full));
     }
 }

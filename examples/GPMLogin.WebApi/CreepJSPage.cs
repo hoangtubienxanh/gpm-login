@@ -5,7 +5,7 @@ namespace GPMLogin.WebApi;
 
 public class CreepJSPage(IPage page)
 {
-    public async Task<JsonElement?> Handle()
+    public async Task<JsonElement> Handle()
     {
         await page.GoToAsync("https://abrahamjuliot.github.io/creepjs/");
         await page.WaitForExpressionAsync("window.Fingerprint",

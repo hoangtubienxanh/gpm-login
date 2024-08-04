@@ -5,7 +5,7 @@ namespace GPMLogin.WebApi;
 
 public class DeviceAndBrowserInfoPage(IPage page)
 {
-    public async Task<JsonElement?> Handle()
+    public async Task<JsonElement> Handle()
     {
         await page.GoToAsync("https://deviceandbrowserinfo.com/info_device");
         await page.WaitForExpressionAsync("window.fingerprint && window.fingerprint.speechSynthesisVoices",
