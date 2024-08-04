@@ -1,6 +1,10 @@
 @GPMLogin.WebApi_HostAddress = http://localhost:5152
 
-GET {{GPMLogin.WebApi_HostAddress}}/weatherforecast/
+### Collect fingerprint data (Headful)
+GET {{GPMLogin.WebApi_HostAddress}}/gpm-login/fp-collect
 Accept: application/json
 
-###
+### Collect fingerprint data (Headless)
+GET {{GPMLogin.WebApi_HostAddress}}/gpm-login/fp-collect?headless=true
+Accept: application/json
+

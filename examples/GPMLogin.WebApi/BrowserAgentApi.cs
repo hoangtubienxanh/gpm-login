@@ -23,26 +23,37 @@ public static class BrowserAgentApi
     private static async Task<Ok<Dictionary<string, JsonElement?>>> CollectFingerprintData(
         [AsParameters] CollectFingerprintDataContext launcherContext, ILogger<CollectFingerprintDataContext> logger)
     {
-        var (id, name, _, _, _, _, _, _, _) = await launcherContext.CreateNamedProfile();
-        var (_, _, _, address, _) = await launcherContext.Client.StartProfileAsync(id, new StartProfileRequest()
+        var choice = Random.Shared.Next(0, 1);
+        var namedProfile = await launcherContext.CreateNamedProfile();
+        var (id, name, _, _, _, _, _, _, _) = namedProfile;
+
+        List<string> commandLineSwitches =
+        [
+            // Allow pasting
+            "--unsafely-disable-devtools-self-xss-warnings",
+            // Required for Browser.getBrowserCommandLine
+            "--enable-automation",
+        ];
+
+        if (launcherContext.Headless is true)
         {
-            CommandLineSwitches =
-            [
-                // Allow pasting
-                "--unsafely-disable-devtools-self-xss-warnings",
-                // Required for Browser.getBrowserCommandLine
-                "--enable-automation",
-            ]
-        });
+            logger.LogInformation("Running headless chrome");
+            commandLineSwitches.Add(
+                // Run chrome as headless
+                "--headless=new");
+        }
+
+        var (_, _, _, address, _) = await launcherContext.Client.StartProfileAsync(id,
+            new StartProfileRequest() { CommandLineSwitches = commandLineSwitches });
         var browser = await launcherContext.EnsureConnected(address);
         var context = browser.DefaultContext;
 
         var page = await context.NewPageAsync();
         var cdp = await page.CreateCDPSessionAsync();
 
-        var response = await CollectFingerprintDataCore(context, cdp, logger);
+        var response = await CollectFingerprintDataCore(browser, cdp, logger);
+        response.Add("Profile", JsonSerializer.SerializeToElement(namedProfile));
 
-        var choice = Random.Shared.Next(0, 1);
         logger.LogInformation("Executing cleanup strategy {choice} for profile name: {name}", choice, name);
 
         if (choice is 1)
@@ -63,13 +74,16 @@ public static class BrowserAgentApi
         return TypedResults.Ok(response);
     }
 
-    private static async Task<Dictionary<string, JsonElement?>> CollectFingerprintDataCore(IBrowserContext context,
+    private static async Task<Dictionary<string, JsonElement?>> CollectFingerprintDataCore(IBrowser browser,
         ICDPSession cdp, ILogger<CollectFingerprintDataContext> logger)
     {
         // One or more functions used to collect fingerprint information does require the use of `Runtime.enable`  
-        var creepJsObject = new CreepJSPage(await context.NewPageAsync()).Handle();
-        var deviceBrowserInfoJsObject = new DeviceAndBrowserInfoPage(await context.NewPageAsync()).Handle();
-        var botCheckerJsObject = new BotCheckerPage(await context.NewPageAsync()).Handle();
+        // Running each page in isolation helps prevent the site from loading slowly when the tab is not focused.
+        var creepJsObject = new CreepJSPage(await NewIsolatedPage(browser)).Handle();
+        var deviceBrowserInfoJsObject =
+            new DeviceAndBrowserInfoPage(await NewIsolatedPage(browser)).Handle();
+        var botCheckerJsObject =
+            new BotCheckerPage(await NewIsolatedPage(browser)).Handle();
         var commandLineResponse = cdp.SendAsync("Browser.getBrowserCommandLine");
         Task[] aggregatedTasks = [creepJsObject, deviceBrowserInfoJsObject, botCheckerJsObject, commandLineResponse];
 
@@ -96,6 +110,12 @@ public static class BrowserAgentApi
 
         return aggregatedResults;
     }
+
+    private static async Task<IPage> NewIsolatedPage(IBrowser browser)
+    {
+        var context = await browser.CreateBrowserContextAsync();
+        return await context.NewPageAsync();
+    }
 }
 
 internal readonly struct CollectFingerprintDataContext
@@ -103,6 +123,7 @@ internal readonly struct CollectFingerprintDataContext
     [FromServices] public IGPMLoginClient Client { get; init; }
     [FromServices] public TimeProvider TimeProvider { get; init; }
     [FromServices] public IHttpClientFactory HttpClientFactory { get; init; }
+    [FromQuery(Name = "headless")] public bool? Headless { get; init; }
     private HttpClient NamedClient => HttpClientFactory.CreateClient("remote-debugging-address");
 
     private const string Charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
