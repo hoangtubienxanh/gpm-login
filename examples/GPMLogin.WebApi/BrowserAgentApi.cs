@@ -1,6 +1,5 @@
 ﻿using System.Text.Json;
 
-using GPMLogin.Apis;
 using GPMLogin.Apis.Supplements;
 using GPMLogin.Apis.Supplements.Enums;
 
@@ -23,8 +22,7 @@ public static class BrowserAgentApi
     private static async Task<Ok<Dictionary<string, JsonElement?>>> CollectFingerprintData(
         [AsParameters] CollectFingerprintDataContext launcherContext, ILogger<CollectFingerprintDataContext> logger)
     {
-        var choice = Random.Shared.Next(0, 1);
-        var namedProfile = await launcherContext.CreateNamedProfile();
+        var namedProfile = await launcherContext.Setup.CreateNamedProfile();
         var (id, name, _, _, _, _, _, _, _) = namedProfile;
 
         List<string> commandLineSwitches =
@@ -46,6 +44,7 @@ public static class BrowserAgentApi
         var (_, _, _, address, _) = await launcherContext.Client.StartProfileAsync(id,
             new StartProfileRequest() { CommandLineSwitches = commandLineSwitches });
         var browser = await launcherContext.EnsureConnected(address);
+
         var context = browser.DefaultContext;
 
         var page = await context.NewPageAsync();
@@ -54,12 +53,13 @@ public static class BrowserAgentApi
         var response = await CollectFingerprintDataCore(browser, cdp, logger);
         response.Add("Profile", JsonSerializer.SerializeToElement(namedProfile));
 
+        var choice = Random.Shared.Next(0, 1);
         logger.LogInformation("Executing cleanup strategy {choice} for profile name: {name}", choice, name);
 
         if (choice is 1)
         {
             // Recommended choice
-            await launcherContext.StopAndDelete(id);
+            await launcherContext.Setup.StopAndDelete(id);
         }
         else
         {
@@ -120,46 +120,16 @@ public static class BrowserAgentApi
 
 internal readonly struct CollectFingerprintDataContext
 {
+    [FromServices] public GPMLoginSetup Setup { get; init; }
     [FromServices] public IGPMLoginClient Client { get; init; }
-    [FromServices] public TimeProvider TimeProvider { get; init; }
-    [FromServices] public IHttpClientFactory HttpClientFactory { get; init; }
     [FromQuery(Name = "headless")] public bool? Headless { get; init; }
-    private HttpClient NamedClient => HttpClientFactory.CreateClient("remote-debugging-address");
-
-    private const string Charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-
-    private static string GenerateRandomString(int length)
-    {
-        return string.Create<object?>(length, null,
-            static (chars, _) => Random.Shared.GetItems(Charset, chars));
-    }
-
-    public async Task<CreateProfileResponse> CreateNamedProfile()
-    {
-        var response = await Client.CreateProfileAsync(new CreateProfileRequest
-        {
-            DisplayName = $"{TimeProvider.GetLocalNow():O} - Transient Profile | {GenerateRandomString(6)}"
-        });
-        return response;
-    }
 
     public async Task<IBrowser> EnsureConnected(string remoteDebuggingAddress)
     {
-        var response = await NamedClient.GetFromJsonAsync<JsonElement>($"http://{remoteDebuggingAddress}/json/version");
-
-        if (!response.TryGetProperty("webSocketDebuggerUrl", out var property) ||
-            property.GetString() is not { } webSocketDebuggerUrl)
-            throw new InvalidOperationException();
-
+        var webSocketDebuggerUrl = await Setup.GetBrowserWSConnection(remoteDebuggingAddress);
         return await Puppeteer.ConnectAsync(new ConnectOptions
         {
             DefaultViewport = null, BrowserWSEndpoint = webSocketDebuggerUrl
         });
-    }
-
-    public async Task StopAndDelete(string profileId)
-    {
-        await Client.StopProfileAsync(profileId);
-        await Client.DeleteProfileAsync(profileId, new DeleteProfileRequest(DeleteType.Full));
     }
 }

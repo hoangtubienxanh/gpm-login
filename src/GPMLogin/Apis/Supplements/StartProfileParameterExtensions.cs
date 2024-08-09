@@ -11,7 +11,7 @@ internal static class StartProfileParameterExtensions
 
         var kv = new List<KeyValuePair<string, string>>();
 
-        if (commandLineSwitches != null)
+        if (commandLineSwitches is { Count: > 0 })
             kv.Add(new KeyValuePair<string, string>("addination_args", string.Join(" ", commandLineSwitches)));
 
         if (dpiScaling is { } dpiScalingValue and <= 1.0 and >= 0)

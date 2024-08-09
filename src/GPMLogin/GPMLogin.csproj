@@ -5,6 +5,7 @@
         <IsPackable>true</IsPackable>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <Version>1.0.1</Version>
     </PropertyGroup>
 
     <!-- Packaging-related properties -->

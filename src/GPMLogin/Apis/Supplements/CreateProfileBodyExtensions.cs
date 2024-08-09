@@ -16,7 +16,7 @@ internal static class CreateProfileBodyExtensions
             BrowserVersion = request.BrowserVersion,
             IsRandomBrowserVersion = request.BrowserVersion is not null,
             RawProxy = request.ProxyConnectionString,
-            StartupUrls = string.Concat(request.NewPageUrls, " "),
+            StartupUrls = request.NewPageUrls is { Length: >= 1 } ? string.Join(" ", request.NewPageUrls) : null,
             IsMaskedFont = request.HasModifiedFontList,
             IsNoiseCanvas = request.HasModifiedCanvasData,
             IsNoiseWebgl = request.HasModifiedWebGLData,

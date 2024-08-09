@@ -12,6 +12,7 @@ services.TryAddSingleton(TimeProvider.System);
 
 services.AddGPMLoginClient(configuration.GetRequiredSection("gpmloginapp").Bind);
 services.AddHttpClient("remote-debugging-address").AddStandardResilienceHandler();
+services.AddTransient<GPMLoginSetup>();
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 services.AddEndpointsApiExplorer();
